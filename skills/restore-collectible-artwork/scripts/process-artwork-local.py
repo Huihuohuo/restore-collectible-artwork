@@ -73,7 +73,7 @@ def detect_body(path, expected_size, picture_only=False):
     h, w = alpha.shape
     opaque = alpha > 245
     if not picture_only and np.mean(alpha < 16) < .00005:
-        raise ValueError('Automatic card boundary needs a transparent exterior; inspect this image manually')
+        raise ValueError('Automatic card boundary needs a transparent exterior. If visual review confirms the complete artwork fills this opaque canvas with no surroundings/gutter, set generation_layout: "full_canvas", crop: "auto" and rerun. Alternatively set generated to this file and crop: [0, 0, W, H] with inspected integer bounds, without --new-generated. Matching aspect alone is not evidence of a correct crop.')
 
     def main_run(profile):
         ids = np.flatnonzero(profile >= .75)
@@ -217,7 +217,7 @@ def run(config, out_dir, *, rebuild_reference=False, diagnostics=False,
             reference = out_dir/'prepared/reference.png'
         else:
             steps['prepare'] = 0.0
-        contract = prepare.generation_contract(reference, data.get('generation_layout'))
+        contract = prepare.generation_contract(reference, data.get('generation_layout', geometry.get('generation_layout')))
         report['generation'] = contract
         crop = data['crop']
         if contract['layout'] == 'full_canvas':

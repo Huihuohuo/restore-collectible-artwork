@@ -34,15 +34,13 @@ def save_report(folder, data):
 
 
 def generation_contract(reference, layout=None):
-    """Choose output by the calibrated silhouette, never by artwork colors."""
+    """RGB layout is independent of the final silhouette; never key artwork colors."""
     reference = reference if isinstance(reference, Image.Image) else image(reference)
     rectangular = reference.convert('RGBA').getchannel('A').getextrema() == (255, 255)
     if layout is None:
         layout = 'full_canvas' if rectangular else 'transparent_object'
     if layout not in {'full_canvas', 'transparent_object'}:
         raise ValueError('generation_layout must be full_canvas or transparent_object')
-    if layout == 'full_canvas' and not rectangular:
-        raise ValueError('full_canvas requires a fully opaque rectangular reference')
     common = ('Preserve ALL content and backgrounds inside the artwork, including white, black, '
               'gradients and dark scenes. Do not extract the person or key out any color. '
               'Keep the original composition, crop and aspect ratio; no new border, shadow or material. ')
@@ -51,7 +49,27 @@ def generation_contract(reference, layout=None):
               'Keep the complete object interior opaque. Only the area outside the object silhouette '
               'may be genuinely transparent; do not erase backgrounds printed inside it.')
     return {'layout': layout, 'transparent_background': layout == 'transparent_object',
+            'final_alpha': 'immutable_reference',
             'output_requirements': common + output}
+
+
+def opaque_edit_input(reference):
+    """Extend only exterior row ends for an opaque host, without changing the master.
+
+    No photographed surroundings or matte color is inserted. These temporary
+    corner extensions are discarded when the reference alpha is restored.
+    Disconnected silhouettes/holes need a different explicitly reviewed input.
+    """
+    rgba = np.array(reference.convert('RGBA'))
+    rgb = rgba[:, :, :3].copy()
+    for y, alpha in enumerate(rgba[:, :, 3]):
+        ids = np.flatnonzero(alpha == 255)
+        # Supersampled masks can ring by a few alpha levels near a curve.
+        if not len(ids) or np.any(alpha[ids[0]:ids[-1]+1] < 245):
+            raise ValueError('Opaque edit input requires a solid row-connected silhouette; inspect the mask')
+        rgb[y, :ids[0]] = rgb[y, ids[0]]
+        rgb[y, ids[-1]+1:] = rgb[y, ids[-1]]
+    return Image.fromarray(rgb)
 
 
 def full_canvas_crop(draft, expected_size):
@@ -65,6 +83,15 @@ def full_canvas_crop(draft, expected_size):
     return {'crop': [0, 0, draft.width, draft.height], 'method': 'complete opaque canvas',
             'aspect_error_before_fit': error, 'opaque_coverage': 1.0,
             'note': 'No color-based background removal. Content/composition still require visual review.'}
+
+
+def rounded_mask(size, radius):
+    w, h = size
+    supersample = 4 if max(w, h) <= 2048 else 2
+    mask = Image.new('L', (w*supersample, h*supersample), 0)
+    ImageDraw.Draw(mask).rounded_rectangle((0, 0, w*supersample-1, h*supersample-1),
+                                          radius=radius*supersample, fill=255)
+    return mask.resize((w, h), Image.Resampling.LANCZOS)
 
 
 def positive_int(value, name):
@@ -171,6 +198,10 @@ def output_size(spec, allow_legacy=False):
 def prepare(args):
     source, config = Path(args.input), Path(args.geometry)
     spec = json.loads(config.read_text(encoding='utf-8'))
+    if 'geometry_review' in spec and spec['geometry_review'] != 'accepted':
+        raise ValueError('Geometry diagnostics are pending review; inspect source/corner/edge comparisons, resolve uncertainty, then set geometry_review: "accepted"')
+    if 'geometry_review' in spec and spec.get('corner_radius_px') is None and not spec.get('mask_path'):
+        raise ValueError('Resolve the uncertain corner radius or supply a reviewed mask; do not silently use zero')
     (w, h), format_metadata = output_size(spec, args.allow_legacy_geometry)
     spec['output_size'] = [w, h]
     spec.pop('pixels_per_mm', None)
@@ -203,28 +234,31 @@ def prepare(args):
         if mask.size != (w, h):
             raise ValueError('mask_path size differs from output_size')
     else:
-        supersample = 4 if max(w, h) <= 2048 else 2
-        mask = Image.new('L', (w*supersample, h*supersample), 0)
-        ImageDraw.Draw(mask).rounded_rectangle((0, 0, w*supersample-1, h*supersample-1),
-                                              radius=radius*supersample, fill=255)
-        mask = mask.resize((w, h), Image.Resampling.LANCZOS)
+        mask = rounded_mask((w, h), radius)
+    unmasked = reference.convert('RGB')
     reference.putalpha(mask)
-    contract = generation_contract(reference)
+    contract = generation_contract(reference, spec.get('generation_layout'))
     pad = int(spec.get('edit_gutter_px', 0 if contract['layout'] == 'full_canvas' else 32))
     if not 0 <= pad <= 128:
         raise ValueError('edit_gutter_px must be between 0 and 128')
-    edit = Image.new('RGBA', (w+2*pad, h+2*pad), (0, 0, 0, 0))
-    edit.alpha_composite(reference, (pad, pad))
+    if contract['layout'] == 'full_canvas' and spec.get('generation_layout') == 'full_canvas':
+        if pad:
+            raise ValueError('Explicit full_canvas requires edit_gutter_px: 0 (or omit it)')
+        edit = opaque_edit_input(reference)
+    else:
+        edit = Image.new('RGBA', (w+2*pad, h+2*pad), (0, 0, 0, 0))
+        edit.alpha_composite(reference, (pad, pad))
     folder = new_folder(args.out_dir)
     shutil.copy2(source, folder/('source-original'+source.suffix.lower()))
     reference.save(folder/'reference.png')
+    unmasked.save(folder/'rectified-unmasked.png')
     mask.save(folder/'mask.png')
     edit.save(folder/'edit-input.png')
     (folder/'geometry.json').write_text(json.dumps(spec, ensure_ascii=False, indent=2)+'\n', encoding='utf-8')
     save_report(folder, {'operation':'prepare', 'source_sha256':digest(source),
                          'geometry':spec, 'reference_size':[w,h],
                          'format':format_metadata,
-                         'generation':{**contract, 'recommended_input': 'reference.png' if contract['layout'] == 'full_canvas' else 'edit-input.png'},
+                         'generation':{**contract, 'recommended_input': 'reference.png' if contract['layout'] == 'full_canvas' and pad else 'edit-input.png'},
                          'note':'Geometry reference only; photographed lighting/material is still present.'})
     print(folder.resolve())
 

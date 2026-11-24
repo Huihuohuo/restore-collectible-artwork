@@ -126,11 +126,10 @@ class PictureBackgrounds(unittest.TestCase):
                 edit_input=self.folder/'padded.png', tool_dir=tool, job_dir=self.folder/'job'))
         self.assertFalse((self.folder/'job').exists())
 
-    def test_round_outline_cannot_request_full_canvas_and_legacy_layout_still_checks_holes(self):
+    def test_round_outline_can_request_full_canvas_and_legacy_layout_still_checks_holes(self):
         reference = Image.new('RGBA', (200, 300), 'white')
         reference.putpixel((0, 0), (255, 255, 255, 0))
-        with self.assertRaisesRegex(ValueError, 'opaque rectangular reference'):
-            PREPARE.generation_contract(reference, 'full_canvas')
+        self.assertFalse(PREPARE.generation_contract(reference, 'full_canvas')['transparent_background'])
         data = json.loads(self.config.read_text())
         data['generation_layout'] = 'transparent_object'
         self.config.write_text(json.dumps(data))

@@ -4,8 +4,8 @@
 
 ## 第一次处理新照片
 
-1. 先取得对象类型和目标宽高/单位，再查看原图、选择常见预设或 custom 并确认本图四角，用 `prepare_artwork.py prepare` 建立参照。它不自动识别源照片四角。
-2. 按准备报告 `generation` 的推荐输入和输出方式做源图编辑。完整矩形使用不透明、无边距的整个画面；带外部透明区的物品仅轮廓外透明。保存结果。
+1. 先取得对象类型和目标宽高/单位，再查看原图、选择常见预设或 custom 并确认本图四角。可用 [诊断工具](outline-diagnostics.md) 辅助寻找边线和圆角；prepare 本身只执行核对后的几何参数。
+2. 在 geometry 中显式选 `generation_layout`，再用 `prepare_artwork.py prepare` 建立参照。工具不支持透明输出或能力未知时用 `full_canvas`（圆角也适用），省略留白或设为 0。按准备报告推荐的输入与输出方式编辑，保存结果。
 3. 创建以下配置；路径都相对**配置文件所在目录**，不相对当前工作目录。
 
 ```json
@@ -43,12 +43,14 @@ python scripts/process-artwork-local.py \
 
 可选 `baseline` 仅用于同一生成输入的回归，要求 RGBA 完全相同；不同生成结果不适用。`--new-generated` 自动忽略旧生成图与旧成品的像素指纹，继续保留源图/版型/参照检查。`--rebuild-reference` 只用已知四角重建参照，不包含首次定位。
 
-默认输出方式由不可变参照的 alpha 决定，与画面颜色无关：
+输出方式先读 job 配置的 `generation_layout`，再读 geometry；旧配置都未声明时才按参照 alpha 回退，与画面颜色无关：
 
-- `full_canvas`：参照是全不透明矩形，检查返回图也完全不透明、比例符合要求，然后使用整张画布。无需人工寻找矩形边界；部分画内背景被误抠时拒绝，不自动改走抠图路径。画内白、黑、其他颜色和暗场均保留。
+- `full_canvas`：参照可以有圆角，返回图必须完全不透明、比例符合要求，使用整张画布后恢复参照 alpha。生成前明确要求画面铺满且无环境/边距；已有结果要先目视确认此条件，比例相符本身不能证明裁切正确。部分画内背景被误抠时拒绝，不自动改走抠图路径。
 - `transparent_object`：参照带外部透明轮廓，定位单个居中的正视主体。多主体、错误比例、含大块不透明外部环境时拒绝。归一前还会检查画内透明缺损，不能只凭最终 alpha 正确就通过。
 
-配置可显式设置 `generation_layout: "transparent_object"` 复现旧的“完整矩形加透明留白”生成结果；不要用它绕过背景误删检查。`full_canvas` 不允许用于带透明轮廓的参照。两种路径都保留原比例、配准和边缘限制，最终 alpha 沿用参照，不能靠改路径、放宽阈值或重新套 alpha 伪造成功。
+配置可显式设置 `generation_layout: "transparent_object"` 复现旧的“完整矩形加透明留白”生成结果；不要用它绕过背景误删检查。若该分支收到不透明图片，报错会直接给出正式 `full_canvas` 配置和人工裁切的复跑写法。脚本不会仅凭比例自动把任意不透明图片当成完整设计。两种路径都保留原比例、配准和边缘限制，最终 alpha 沿用参照。
+
+例如，圆角参照对应的旧生成图经目视确认整幅就是设计，可在 job 中设 `generation_layout: "full_canvas"`、`crop: "auto"`，直接使用 `--new-generated edited.png`；不再需要绕道手工全幅坐标。生成图若仍含桌面、白色外边框或其他环境，要先处理裁切问题。
 
 ## 可选：本机图像工具 start / finish
 
@@ -61,7 +63,7 @@ python scripts/artwork-job.py start \
   --tool-dir /path/to/tool-png-directory --job-dir /path/to/new-job
 ```
 
-start 按轮廓返回 `generation_layout` 和 `transparent_background`，把对应输出要求附在传入提示词后，并保存实际工具指令 `tool-prompt.txt`。宿主使用返回的完整 `prompt`；原指令文件不改写。完整矩形若传入了带透明留白的旧输入，会在调用工具前提示改用 `prepared/reference.png`。宿主调用一次编辑工具，并记录请求前和返回后的 Unix 秒时间戳，再执行：
+start 按选定输出方式返回 `generation_layout` 和 `transparent_background`，把对应要求附在提示词后，保存实际指令 `tool-prompt.txt`。宿主使用返回的完整 `prompt`。全幅路径若传入带透明留白的旧输入会在调用前拒绝：矩形可用 `prepared/reference.png`；圆角应在新目录按 `full_canvas` 准备无透明留白的 `edit-input.png`。宿主调用一次编辑工具，并记录请求前和返回后的 Unix 秒时间戳，再执行：
 
 ```sh
 python scripts/artwork-job.py finish \

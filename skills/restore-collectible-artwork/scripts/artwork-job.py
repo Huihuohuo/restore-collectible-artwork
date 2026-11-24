@@ -54,12 +54,12 @@ def start(args):
     if json.loads(metadata.read_text(encoding='utf-8')).get('geometry') != resolved:
         raise ValueError('Cached reference geometry differs before generation')
     protected[str(metadata)] = PIPELINE.digest(metadata)
-    contract = prepare.generation_contract(paths['reference'], data.get('generation_layout'))
+    contract = prepare.generation_contract(paths['reference'], data.get('generation_layout', geometry.get('generation_layout')))
     if contract['layout'] == 'full_canvas':
         try:
             prepare.full_canvas_crop(edit_input, size)
         except ValueError as error:
-            raise ValueError('Full-canvas edit input must be opaque and have the target ratio; use prepared/reference.png') from error
+            raise ValueError('Full-canvas edit input must be opaque and have the target ratio; use prepared/reference.png for an opaque rectangle, or prepare generation_layout: "full_canvas" with edit_gutter_px: 0 and use prepared/edit-input.png for rounded objects') from error
     effective_prompt = prompt.read_text(encoding='utf-8').rstrip() + '\n\nOutput requirements:\n' + contract['output_requirements'] + '\n'
     folder.mkdir(parents=True, exist_ok=False)
     actual_prompt = folder/'tool-prompt.txt'

@@ -15,7 +15,8 @@
   "quad": [[300, 200], [1100, 220], [1120, 1450], [290, 1440]],
   "pixels_per_mm": 20,
   "corner_radius_px": 28,
-  "edit_gutter_px": 32
+  "generation_layout": "full_canvas",
+  "edit_gutter_px": 0
 }
 ```
 
@@ -23,16 +24,17 @@
 - `quad`：左上、右上、右下、左下，按本次图片标定，不照搬案例或让用户测量实体。
 - `format_id`：用户明确确认尺寸后选择常见预设或 custom，不根据对象名称自动套用规格。
 - 分辨率可用 `output_size`、`pixels_per_mm` 或 `long_edge_px`，三选一。预设默认每毫米 20 像素，自定义物理尺寸默认长边目标 1700px；详细比例与取整规则见 [版型说明](formats.md)。每边限制 128–4096px。
-- `corner_radius_px`：按物品实际外形设置；其他轮廓可用相对配置文件的 `mask_path`。画内所有颜色保持不透明，不使用颜色阈值做人像或背景分割。
+- `corner_radius_px`：拉正后输出像素中的半径，不是源照片像素或毫米。示例的 28 不是默认值；先用 [圆角诊断](outline-diagnostics.md) 和未遮罩实拍确认，直角保持 0。其他轮廓可用相对配置文件的 `mask_path`。画内所有颜色保持不透明，不使用颜色阈值做人像或背景分割。
 - 拍立得正面使用 `instax-mini` / `instax-sq` / `instax-wide`，四角只框内部照片；圆角为 0，不提供 mask。输出完整不透明矩形。
-- 参照 alpha 全部不透明时，默认编辑留白为 0，输出方式为 `full_canvas`；有外部透明轮廓时，默认留白为 32，输出方式为 `transparent_object`。对象名称不决定透明方式。旧配置的显式 `edit_gutter_px` 保留；完整矩形新任务若遇到旧留白输入，使用报告推荐的 `reference.png` 编辑。
+- `generation_layout`：宿主不支持真实透明输出或能力未知时显式用 `full_canvas`，圆角同样适用，`edit_gutter_px` 省略或设 0。`reference.png` 保留真实圆角；仅供编辑的 `edit-input.png` 把轮廓外角落临时延用邻近画内边缘色，避免把实拍环境送去生成，不改变参照或声称恢复角外内容。最终仍用参照 alpha 丢弃角外区域。自定义遮罩若有孔洞或空行，需另行准备和检查编辑输入。
+- `transparent_object` 用于支持真实透明输出的宿主，默认透明留白 32。未声明布局的旧配置继续按参照 alpha 选择，以兼容旧结果。完整矩形旧配置若有留白，按报告改用 `reference.png`；显式 `full_canvas` 不接受非零留白。
 
 ```sh
 python3 scripts/prepare_artwork.py prepare \
   --input source.png --geometry geometry.json --out-dir work/item-01/prepared
 ```
 
-输出 `reference.png`、`mask.png`、`edit-input.png`、源图副本、解析后的几何配置及含 `format`、`generation` 的 `report.json`。`generation` 给出推荐输入、布局、透明开关和输出要求。工具不会自动识别四角。此阶段只校正几何，不负责去材质。
+输出 `reference.png`、`rectified-unmasked.png`、`mask.png`、`edit-input.png`、源图副本、解析后的几何配置及含 `format`、`generation` 的 `report.json`。未遮罩图保留角外实拍环境，供检查轮廓；不要拿它作为已去背景的生成输入。`generation` 给出推荐输入、布局、透明开关和输出要求。prepare 使用已核对四角，不自行寻找物品；可先运行独立诊断辅助确认。此阶段只校正几何，不负责去材质。
 
 缺失/未知版型或不匹配的输出比例会拒绝，不能通过调宽容差或最后横纵拉伸来绕过。其他尺寸可显式设 `format_id: "custom"`，同时提供对象、dimensions 和 target，可用 output_size 或 long_edge_px 设置分辨率；仅复现旧例时可给无 `format_id` 的历史配置加 `--allow-legacy-geometry`。
 

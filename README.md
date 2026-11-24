@@ -2,7 +2,9 @@
 
 用于小卡、明信片、拍立得、周边 PB（写真集）内页等的扫图还原。从实拍照片中提取、拉正画面，减弱反光、实物材质和拍摄色偏的干扰，整理为清晰、平整的 PNG 电子图稿，支持自定义尺寸与后续调色。
 
-**v0.2.0 预览版** · [下载安装包](https://github.com/Huihuohuo/restore-collectible-artwork/releases/tag/v0.2.0) · [版本说明](docs/releases/v0.2.0.md)
+**v0.2.1 预览版** · [下载安装包](https://github.com/Huihuohuo/restore-collectible-artwork/releases/tag/v0.2.1) · [版本说明](docs/releases/v0.2.1.md)
+
+本版新增不透明宿主的圆角支持、候选四角与圆角/边缘对照。四角辅助需要 AI 根据原图复核，不是全自动识别。
 
 主要面向平面周边，也适用于海报、封面等其他平面印刷画面。五种常见版型是快捷预设，其他尺寸使用自定义参数。PB 按单页画面处理；书页弯曲或书脊遮挡需先评估，不能直接视为平面照片。
 
@@ -50,6 +52,8 @@ python -m pip install -r skills/restore-collectible-artwork/scripts/requirements
 
 Windows 可用 `.venv\Scripts\activate`。图像编辑与 HTML 展示能力由宿主提供，不能仅凭支持 SKILL.md 就认定所有功能都可用。
 
+部分宿主不会在会话中途刷新技能列表；安装后可新开会话确认发现情况，或在当前会话明确读取已安装的 `SKILL.md`。目录可读与自动挂载是两件事。
+
 ## 处理与初版交付
 
 以下命令从仓库根目录运行。每张图的 `geometry.json` 必须记录已确认的对象、尺寸及本张照片的四角。例如：
@@ -67,14 +71,14 @@ Windows 可用 `.venv\Scripts\activate`。图像编辑与 HTML 展示能力由�
 }
 ```
 
-上述四角只展示配置结构，必须换成本次源照片的实际坐标。按 [几何说明](skills/restore-collectible-artwork/references/geometry.md) 建立参照：
+上述四角只展示配置结构，必须换成本次源照片的实际坐标。需要辅助时，可先用 [四角/圆角诊断](skills/restore-collectible-artwork/references/outline-diagnostics.md) 输出候选和放大对照，再按 [几何说明](skills/restore-collectible-artwork/references/geometry.md) 建立参照。圆角按本物品估计，不让用户测量，不设置统一内缩值。
 
 ```sh
 python skills/restore-collectible-artwork/scripts/prepare_artwork.py prepare \
   --input source.jpg --geometry geometry.json --out-dir work/prepared
 ```
 
-让具有源图编辑能力的助手按准备报告 `generation` 选择输入和输出方式，再按 [还原指令](skills/restore-collectible-artwork/references/restoration-prompt.md) 编辑，保存为 `edited.png`。完整矩形照片保留全部背景，画面铺满不透明画布；圆角等轮廓只在物品外部透明。画内白底、黑底、渐变及暗场都保留，不做人像抠图。本地 Python 不完成 AI 外观还原。
+准备前根据宿主能力选布局：仅能输出不透明图片或能力未知时，在 geometry 中设 `generation_layout: "full_canvas"`，留白省略或设 0。圆角小卡同样可返回整幅不透明图，最终再恢复参照圆角；支持真实透明输出的工具也可用 `transparent_object`。按准备报告 `generation` 推荐输入和 [还原指令](skills/restore-collectible-artwork/references/restoration-prompt.md) 编辑，保存为 `edited.png`。画内白底、黑底、渐变及暗场都保留，不做人像抠图。本地 Python 不完成 AI 外观还原。
 
 创建 `job.json`（路径相对该配置文件）：
 
