@@ -9,7 +9,7 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFilter
 
 
-def create_fixture(folder, pipeline):
+def create_fixture(folder, pipeline, geometry_overrides=None):
     folder = Path(folder)
     rng = np.random.default_rng(20261122)
     pixels = rng.integers(70, 210, (850, 540, 3), dtype=np.uint8)
@@ -26,10 +26,15 @@ def create_fixture(folder, pipeline):
     draw.rectangle((240, 390, 300, 440), fill='white')
     picture.save(folder/'source.png')
     geometry = {
-        'format_id': 'photocard-standard', 'source_size': [540, 850],
+        'format_id': 'photocard-standard',
+        'object_type': 'photocard', 'dimensions': {'width': 54, 'height': 85, 'unit': 'mm'},
+        'source_size': [540, 850],
         'quad': [[0, 0], [539, 0], [539, 849], [0, 849]],
         'output_size': [540, 850], 'corner_radius_px': 0, 'edit_gutter_px': 30,
     }
+    geometry.update(geometry_overrides or {})
+    if geometry.get('target') == 'picture_only' and 'edit_gutter_px' not in (geometry_overrides or {}):
+        geometry['edit_gutter_px'] = 0
     (folder/'geometry.json').write_text(json.dumps(geometry), encoding='utf-8')
     prepare = pipeline.load_helper('prepare_artwork')
     with contextlib.redirect_stdout(io.StringIO()):
@@ -38,13 +43,20 @@ def create_fixture(folder, pipeline):
     (folder/'generated.png').write_bytes((folder/'prepared/edit-input.png').read_bytes())
     (folder/'baseline.png').write_bytes((folder/'prepared/reference.png').read_bytes())
     (folder/'prompt.txt').write_text('Synthetic geometry test. No model is called.', encoding='utf-8')
+    with Image.open(folder/'prepared/reference.png') as reference:
+        width, height = reference.size
+    with Image.open(folder/'prepared/edit-input.png') as edit_input:
+        pad = (edit_input.width-width)//2
     config = {
         'source': 'source.png', 'geometry': 'geometry.json',
         'reference': 'prepared/reference.png', 'reference_report': 'prepared/report.json',
-        'generated': 'generated.png', 'baseline': 'baseline.png', 'crop': [30, 30, 570, 880],
+        'generated': 'generated.png', 'baseline': 'baseline.png', 'crop': [pad, pad, width+pad, height+pad],
+        # Keep the older padded-rectangle replay as an explicit compatibility case.
+        'generation_layout': 'transparent_object' if pad else 'full_canvas',
     }
     config['expected_sha256'] = {
-        key: pipeline.digest(folder/value) for key, value in config.items() if key != 'crop'
+        key: pipeline.digest(folder/config[key]) for key in
+        ('source', 'geometry', 'reference', 'reference_report', 'generated', 'baseline')
     }
     path = folder/'replay.json'
     path.write_text(json.dumps(config), encoding='utf-8')

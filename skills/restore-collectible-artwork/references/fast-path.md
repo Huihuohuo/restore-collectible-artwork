@@ -4,8 +4,8 @@
 
 ## 第一次处理新照片
 
-1. 查看原图，确定版型和本图四角，用 `prepare_artwork.py prepare` 建立参照。它不自动识别源照片四角。
-2. 以 `edit-input.png` 做源图引导的外观编辑，保存结果。
+1. 先取得对象类型和目标宽高/单位，再查看原图、选择常见预设或 custom 并确认本图四角，用 `prepare_artwork.py prepare` 建立参照。它不自动识别源照片四角。
+2. 按准备报告 `generation` 的推荐输入和输出方式做源图编辑。完整矩形使用不透明、无边距的整个画面；带外部透明区的物品仅轮廓外透明。保存结果。
 3. 创建以下配置；路径都相对**配置文件所在目录**，不相对当前工作目录。
 
 ```json
@@ -26,7 +26,9 @@ python scripts/process-artwork-local.py \
 
 第一次新生成不需要旧生成图、旧成品或旧样本的路径。所有已提供的源文件都检查是否在运行中被修改。可以在 `expected_sha256` 中提供 `source`、`reference`、`reference_report`、`geometry` 的预期 SHA-256，拒绝误用旧参数。
 
-输出 `digital-artwork.png` 和 `run.json`，并保留归一和配准报告。加 `--diagnostics` 可输出叠加图和变换场。输出文件夹必须不存在；任一检查失败不导出最终 PNG。
+输出未调色母版 `digital-artwork.png` 和 `run.json`，并保留归一和配准报告。加 `--diagnostics` 可输出叠加图和变换场。输出文件夹必须不存在；任一检查失败不导出最终 PNG。
+
+完成实际内容与颜色复核后，先展示并交付这张初版。用户可直接采用；需要调色再进入 [可选调色](color-adjustments.md)。本地检查成功本身不等于内容已通过视觉复核。
 
 ## 旧生成图复跑与人工裁切
 
@@ -37,11 +39,16 @@ python scripts/process-artwork-local.py \
   --config /path/to/replay.json --out-dir /path/to/new-result
 ```
 
-人工裁切时**不要传 `--new-generated`**，因为该选项强制自动主体检测。将本次编辑结果写入配置的 `generated` 字段即可；使用新图时移除仅针对旧生成图/旧成品的指纹及 `baseline`，保留源图与参照的检查。
+人工裁切透明物品时**不要传 `--new-generated`**，因为该选项按输出方式重新定位。将本次编辑结果写入配置的 `generated` 字段即可；使用新图时移除仅针对旧生成图/旧成品的指纹及 `baseline`，保留源图与参照的检查。完整矩形始终检查并使用整张返回画布。
 
 可选 `baseline` 仅用于同一生成输入的回归，要求 RGBA 完全相同；不同生成结果不适用。`--new-generated` 自动忽略旧生成图与旧成品的像素指纹，继续保留源图/版型/参照检查。`--rebuild-reference` 只用已知四角重建参照，不包含首次定位。
 
-自动主体检测要求单个、居中的正视主体；小卡需要透明外部，Instax 允许完整不透明矩形。多主体、错误比例、含大块不透明背景等情况停止自动处理。它不会强制拉伸凑比例，最终 alpha 沿用参照，内部白色保持不透明。
+默认输出方式由不可变参照的 alpha 决定，与画面颜色无关：
+
+- `full_canvas`：参照是全不透明矩形，检查返回图也完全不透明、比例符合要求，然后使用整张画布。无需人工寻找矩形边界；部分画内背景被误抠时拒绝，不自动改走抠图路径。画内白、黑、其他颜色和暗场均保留。
+- `transparent_object`：参照带外部透明轮廓，定位单个居中的正视主体。多主体、错误比例、含大块不透明外部环境时拒绝。归一前还会检查画内透明缺损，不能只凭最终 alpha 正确就通过。
+
+配置可显式设置 `generation_layout: "transparent_object"` 复现旧的“完整矩形加透明留白”生成结果；不要用它绕过背景误删检查。`full_canvas` 不允许用于带透明轮廓的参照。两种路径都保留原比例、配准和边缘限制，最终 alpha 沿用参照，不能靠改路径、放宽阈值或重新套 alpha 伪造成功。
 
 ## 可选：本机图像工具 start / finish
 
@@ -54,7 +61,7 @@ python scripts/artwork-job.py start \
   --tool-dir /path/to/tool-png-directory --job-dir /path/to/new-job
 ```
 
-start 返回提示词、编辑输入和 `transparent_background` 要求。宿主调用一次编辑工具，并记录请求前和返回后的 Unix 秒时间戳，再执行：
+start 按轮廓返回 `generation_layout` 和 `transparent_background`，把对应输出要求附在传入提示词后，并保存实际工具指令 `tool-prompt.txt`。宿主使用返回的完整 `prompt`；原指令文件不改写。完整矩形若传入了带透明留白的旧输入，会在调用工具前提示改用 `prepared/reference.png`。宿主调用一次编辑工具，并记录请求前和返回后的 Unix 秒时间戳，再执行：
 
 ```sh
 python scripts/artwork-job.py finish \

@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>还原初版 · 画面微调</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f6f5f2;color:#252c30;font:15px/1.55 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}button,input{font:inherit}button,a.button{border:1px solid #d7d9d5;border-radius:9px;background:white;color:inherit;padding:10px 16px;text-decoration:none;cursor:pointer}button:hover,a.button:hover{background:#f0f2ee}button:focus-visible,a:focus-visible,input:focus-visible,summary:focus-visible{outline:3px solid #5a8980;outline-offset:3px}button:disabled,input:disabled{opacity:.45;cursor:wait}header{max-width:1240px;margin:auto;padding:30px 32px 22px;display:flex;justify-content:space-between;align-items:center;gap:24px}h1{font-size:26px;letter-spacing:-.5px;margin:0 0 6px}header p{margin:0;color:#69716e}main{max-width:1240px;padding:0 32px 32px;margin:auto;display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:24px}.preview,aside{background:#fff;border:1px solid #e0e2dc;border-radius:14px}.preview{overflow:hidden}.preview-top{display:flex;justify-content:space-between;padding:14px 20px;border-bottom:1px solid #e9ebe6;font-size:13px;color:#69716e}.stage{min-height:380px;height:calc(100vh - 228px);max-height:780px;display:flex;align-items:center;justify-content:center;padding:24px;background-color:#fafafa;background-image:conic-gradient(#efefef 25%,transparent 0 50%,#efefef 0 75%,transparent 0);background-size:20px 20px}canvas{max-height:100%;max-width:100%;width:auto;height:auto;object-fit:contain}aside{padding:24px;align-self:start}h2{margin:0 0 4px;font-size:18px}.hint{color:#707872;font-size:13px;margin:0 0 24px}.control{margin:0 0 22px}.row{display:flex;justify-content:space-between;align-items:center}.row output{font-variant-numeric:tabular-nums;color:#526d65;font-size:13px}.control input{width:100%;margin:13px 0 5px;accent-color:#386a5e}.ends{display:flex;justify-content:space-between;font-size:11px;color:#8a918a}details{border-top:1px solid #e5e7e1;padding-top:15px;margin-bottom:22px}summary{cursor:pointer;font-size:13px;color:#626d65;margin-bottom:16px}.actions{display:grid;gap:10px}.actions .primary{background:#315d51;color:white;border-color:#315d51}.actions .primary:hover{background:#254c42}.secondary{display:flex;gap:8px}.secondary button{flex:1;font-size:13px;padding:9px 8px}#status{font-size:12px;color:#6c756d;min-height:38px;margin:18px 0 0}.preview-top button{padding:3px 10px;font-size:12px}#compare[aria-pressed=true]{background:#e8eee9}.note{margin:0;padding:12px 20px;color:#7c837c;font-size:12px;border-top:1px solid #e9ebe6}@media(max-width:760px){header{padding:22px 18px;align-items:flex-start;flex-direction:column;gap:14px}h1{font-size:23px}main{grid-template-columns:1fr;padding:0 18px 24px;gap:16px}.stage{height:56vh;min-height:280px;padding:18px}aside{padding:22px}.control{margin-bottom:18px}}
+</style>
+</head>
+<body>
+<header><div><h1>还原初版，已经准备好。</h1><p>满意就直接保存，也可以再调一点颜色。</p></div><a id="download-initial" class="button" download="restored-initial.png">下载初版 PNG</a></header>
+<main>
+<section class="preview" aria-label="画面预览">
+  <div class="preview-top"><span id="view-label">未调色的还原初版</span><button id="compare" disabled aria-pressed="false">查看初版</button></div>
+  <div class="stage"><canvas id="preview" aria-label="还原画面"></canvas></div>
+  <p class="note"><span id="size"></span> · 棋盘格仅表示透明区域，不会进入下载图片。</p>
+</section>
+<aside>
+  <h2>画面微调</h2><p class="hint">从初版开始调整，随时可以重置。</p>
+  <div class="control"><div class="row"><label for="brightness">亮度</label><output for="brightness" id="brightness-value">0</output></div><input disabled type="range" id="brightness" min="-100" max="100" value="0" step="1"><div class="ends"><span>暗</span><span>亮</span></div></div>
+  <div class="control"><div class="row"><label for="contrast">对比度</label><output for="contrast" id="contrast-value">0</output></div><input disabled type="range" id="contrast" min="-100" max="100" value="0" step="1"><div class="ends"><span>柔和</span><span>鲜明</span></div></div>
+  <div class="control"><div class="row"><label for="saturation">饱和度</label><output for="saturation" id="saturation-value">0</output></div><input disabled type="range" id="saturation" min="-100" max="100" value="0" step="1"><div class="ends"><span>淡</span><span>浓</span></div></div>
+  <div class="control"><div class="row"><label for="temperature">色温</label><output for="temperature" id="temperature-value">0</output></div><input disabled type="range" id="temperature" min="-100" max="100" value="0" step="1"><div class="ends"><span>冷</span><span>暖</span></div></div>
+  <details><summary>进阶调节</summary><div class="control"><div class="row"><label for="hue">色相</label><output for="hue" id="hue-value">0°</output></div><input disabled type="range" id="hue" min="-180" max="180" value="0" step="1"><div class="ends"><span>−180°</span><span>+180°</span></div></div></details>
+  <div class="actions"><button class="primary" id="download" disabled>下载当前调整 PNG</button><div class="secondary"><button id="reset" disabled>重置调整</button><button id="save-settings" disabled>保存调色参数</button></div><button id="load-settings" disabled>载入调色参数</button><input type="file" accept="application/json,.json" id="settings-file" hidden></div>
+  <p id="status" role="status" aria-live="polite">正在载入初版…</p>
+</aside>
+</main>
+<script id="artwork-data" type="application/json">__ARTWORK_PAYLOAD__</script>
+<script>__ARTWORK_CORE__</script>
+<script>
+'use strict';
+const core = ArtworkColor, payload = JSON.parse(document.querySelector('#artwork-data').textContent);
+const canvas = document.querySelector('#preview'), context = canvas.getContext('2d');
+const status = document.querySelector('#status'), compare = document.querySelector('#compare');
+const initialLink = document.querySelector('#download-initial');
+initialLink.href = 'data:image/png;base64,' + payload.png;
+document.querySelector('#size').textContent = `${payload.width} × ${payload.height} px`;
+let master, values = core.settings(), comparing = false, scheduled = 0;
+function sync() {
+  for (const [key, number] of Object.entries(values)) {
+    document.getElementById(key).value = number;
+    document.getElementById(key + '-value').textContent = (number > 0 ? '+' : '') + number + (key === 'hue' ? '°' : '');
+  }
+}
+function render() {
+  if (!master) return;
+  const pixels = comparing ? new Uint8ClampedArray(master) : core.adjust(master, values);
+  context.putImageData(new ImageData(pixels, payload.width, payload.height), 0, 0);
+  document.querySelector('#view-label').textContent = comparing || core.neutral(values) ? '未调色的还原初版' : '当前调整';
+  compare.setAttribute('aria-pressed', String(comparing));
+  compare.textContent = comparing ? '返回当前调整' : '查看初版';
+  canvas.dataset.settings = JSON.stringify(values); canvas.dataset.view = comparing ? 'initial' : 'adjusted';
+}
+function download(blob, name) {
+  const url = URL.createObjectURL(blob), link = document.createElement('a');
+  link.href = url; link.download = name; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+for (const key of Object.keys(values)) document.getElementById(key).addEventListener('input', event => {
+  values = core.settings({ ...values, [key]: Number(event.target.value) });
+  comparing = false; sync(); cancelAnimationFrame(scheduled); scheduled = requestAnimationFrame(render);
+});
+compare.addEventListener('click', () => { comparing = !comparing; render(); });
+document.querySelector('#reset').addEventListener('click', () => {
+  values = core.settings(); comparing = false; sync(); render(); status.textContent = '已回到未调色初版。';
+});
+document.querySelector('#download').addEventListener('click', async () => {
+  const snapshot = core.settings(values); // Never export the temporary comparison view.
+  const button = document.querySelector('#download'); button.disabled = true;
+  try {
+    const blob = core.neutral(snapshot) ? new Blob([core.fromBase64(payload.png)], { type: 'image/png' })
+      : await core.png(payload.width, payload.height, core.exportPixels(master, snapshot));
+    download(blob, 'artwork-adjusted.png'); status.textContent = '已导出当前调整，初版继续保留。';
+  } catch (error) { status.textContent = '导出失败：' + error.message; }
+  finally { button.disabled = false; }
+});
+document.querySelector('#save-settings').addEventListener('click', () => {
+  const record = { version: 1, master_sha256: payload.sha256, settings: values };
+  download(new Blob([JSON.stringify(record, null, 2)], { type: 'application/json' }), 'artwork-adjustments.json');
+  status.textContent = '已保存这张初版的调色参数。';
+});
+document.querySelector('#load-settings').addEventListener('click', () => document.querySelector('#settings-file').click());
+document.querySelector('#settings-file').addEventListener('change', async event => {
+  const file = event.target.files[0]; if (!file) return;
+  try {
+    const record = JSON.parse(await file.text());
+    if (record.master_sha256 && record.master_sha256 !== payload.sha256) throw new Error('这组参数属于另一张初版');
+    values = core.settings(record.settings ?? record); comparing = false; sync(); render(); status.textContent = '已载入调色参数。';
+  } catch (error) { status.textContent = '未载入参数：' + error.message; }
+  event.target.value = '';
+});
+core.inflate(payload.rgba).then(pixels => {
+  if (pixels.length !== payload.width * payload.height * 4) throw new Error('初版像素数据不完整');
+  master = pixels; canvas.width = payload.width; canvas.height = payload.height;
+  document.querySelectorAll('button,input[type=range]').forEach(element => { element.disabled = false; });
+  render(); status.textContent = '可以直接下载初版，或按喜好微调。';
+}).catch(error => { status.textContent = '当前浏览器无法打开调色面板；仍可下载初版 PNG。' + error.message; });
+</script>
+</body>
+</html>

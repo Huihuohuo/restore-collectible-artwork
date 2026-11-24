@@ -20,7 +20,8 @@ class Formats(unittest.TestCase):
             Image.new('RGB', (300, 400), 'white').save(folder/'white.png')
             for name, info in formats.items():
                 with self.subTest(format=name):
-                    config = {'format_id': name, 'source_size': [300, 400],
+                    config = {'format_id': name, 'object_type': info['category'],
+                              'dimensions': {'width': info['size_mm'][0], 'height': info['size_mm'][1], 'unit': 'mm'}, 'source_size': [300, 400],
                               'quad': [[0, 0], [299, 0], [299, 399], [0, 399]],
                               'pixels_per_mm': 4,
                               'corner_radius_px': 0 if info['target'] == 'picture_only' else 12}
@@ -38,6 +39,6 @@ class Formats(unittest.TestCase):
 
     def test_wrong_ratio_and_instax_border_mask_are_rejected(self):
         with self.assertRaisesRegex(ValueError, 'does not match'):
-            PREPARE.output_size({'format_id': 'photocard-standard', 'output_size': [540, 860]})
+            PREPARE.output_size({'format_id': 'photocard-standard', 'object_type': 'card', 'dimensions': {'width': 54, 'height': 85, 'unit': 'mm'}, 'output_size': [540, 860]})
         with self.assertRaisesRegex(ValueError, 'picture only'):
-            PREPARE.output_size({'format_id': 'instax-mini', 'corner_radius_px': 5})
+            PREPARE.output_size({'format_id': 'instax-mini', 'object_type': 'Instax Mini', 'dimensions': {'width': 46, 'height': 62, 'unit': 'mm'}, 'corner_radius_px': 5})

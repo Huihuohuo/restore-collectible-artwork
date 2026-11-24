@@ -1,4 +1,4 @@
 interface:
-  display_name: "周边电子原稿还原"
-  short_description: "按传入版型参数还原小卡与拍立得，检查内部比例并返回 PNG 画面母版"
-  default_prompt: "使用 $restore-collectible-artwork 按提供的版型参数处理这张实拍，提取拉正、还原电子稿并核对内部比例，返回 PNG 画面母版。"
+  display_name: "周边高清扫图"
+  short_description: "小卡、明信片、拍立得、周边 PB 内页的扫图还原，支持自定义尺寸与调色"
+  default_prompt: "使用 $restore-collectible-artwork 给这张周边实拍做扫图还原；先确认对象和目标宽高，提取拉正并核对内容，先交付 PNG 初版，再按需要调色。"

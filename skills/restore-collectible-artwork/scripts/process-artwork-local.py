@@ -52,6 +52,8 @@ def read_config(path, *, require_generated=True):
     if not required <= paths.keys():
         raise ValueError('Config requires reference and geometry; also generated unless --new-generated is supplied')
     crop = data.get('crop')
+    if data.get('generation_layout') not in (None, 'full_canvas', 'transparent_object'):
+        raise ValueError('generation_layout must be full_canvas or transparent_object')
     if crop != 'auto' and (not isinstance(crop, list) or len(crop) != 4 or any(type(v) is not int for v in crop)):
         raise ValueError('crop must be four inspected integer bounds or the explicit value auto')
     return data, paths
@@ -157,8 +159,6 @@ def run(config, out_dir, *, rebuild_reference=False, diagnostics=False,
         paths.pop('baseline', None)
         auto_crop = True
     geometry = json.loads(paths['geometry'].read_text(encoding='utf-8'))
-    if geometry.get('format_id') not in json.loads((HELPERS.parent/'references/formats.json').read_text(encoding='utf-8')):
-        raise ValueError('This entry requires one of the five explicit format_id presets')
     expected_size, format_metadata = prepare.output_size(geometry)
     if rebuild_reference and 'source' not in paths:
         raise ValueError('--rebuild-reference needs source and the existing calibrated geometry')
@@ -167,6 +167,7 @@ def run(config, out_dir, *, rebuild_reference=False, diagnostics=False,
         metadata = json.loads(metadata_path.read_text(encoding='utf-8'))
         resolved = {**geometry, 'output_size': list(expected_size)}
         resolved.pop('pixels_per_mm', None)
+        resolved.pop('long_edge_px', None)
         if metadata.get('geometry') != resolved:
             raise ValueError('Cached reference geometry differs; use --rebuild-reference with the correct source')
         paths['reference_report'] = metadata_path
@@ -216,10 +217,19 @@ def run(config, out_dir, *, rebuild_reference=False, diagnostics=False,
             reference = out_dir/'prepared/reference.png'
         else:
             steps['prepare'] = 0.0
+        contract = prepare.generation_contract(reference, data.get('generation_layout'))
+        report['generation'] = contract
         crop = data['crop']
-        if auto_crop or crop == 'auto':
+        if contract['layout'] == 'full_canvas':
             start = time.perf_counter()
-            report['body_detection'] = detect_body(paths['generated'], expected_size, format_metadata['target'] == 'picture_only')
+            report['body_detection'] = prepare.full_canvas_crop(paths['generated'], expected_size)
+            if not auto_crop and crop != 'auto' and crop != report['body_detection']['crop']:
+                raise ValueError('Full-canvas artwork must retain the entire generated picture; inspect the output contract')
+            crop = report['body_detection']['crop']
+            steps['detect_body'] = time.perf_counter()-start
+        elif auto_crop or crop == 'auto':
+            start = time.perf_counter()
+            report['body_detection'] = detect_body(paths['generated'], expected_size)
             crop = report['body_detection']['crop']
             steps['detect_body'] = time.perf_counter()-start
         report['crop'] = crop
@@ -249,6 +259,10 @@ def run(config, out_dir, *, rebuild_reference=False, diagnostics=False,
         shutil.copyfile(out_dir/'alignment/aligned.png', out_dir/'digital-artwork.png')
         steps['export'] = time.perf_counter()-start
         report['output'] = str(out_dir/'digital-artwork.png')
+        report['delivery'] = {'stage': 'restored_initial', 'master': report['output'],
+                              'visual_review': 'required_before_presenting_as_checked',
+                              'next': 'Show and offer the initial PNG first; color adjustment is optional.',
+                              'adjustments_applied': False}
         report['status'] = 'matches_approved_baseline' if 'baseline' in paths else 'local_checks_passed_requires_visual_review'
         report['total_seconds'] = time.perf_counter()-started_at
         (out_dir/'run.json').write_text(json.dumps(report, ensure_ascii=False, indent=2)+'\n', encoding='utf-8')
@@ -265,8 +279,8 @@ def main():
     parser.add_argument('--out-dir', required=True, help='New output directory; existing paths are refused')
     parser.add_argument('--rebuild-reference', action='store_true', help='Include rectification with the existing known quad; not new-photo detection')
     parser.add_argument('--diagnostics', action='store_true', help='Also save overlay PNGs and the alignment field')
-    parser.add_argument('--auto-crop', action='store_true', help='Detect a single generated card body using opaque central-band runs')
-    parser.add_argument('--new-generated', help='Process a NEW generation with automatic body detection; preserve source guards, do not compare old generated pixels')
+    parser.add_argument('--auto-crop', action='store_true', help='Use the complete opaque canvas or locate one transparent object, according to the reference silhouette')
+    parser.add_argument('--new-generated', help='Process a NEW generation using the output contract; preserve source guards, do not compare old generated pixels')
     parser.add_argument('--execution', choices=['in-process', 'subprocess'], default='in-process', help='subprocess is provided for measuring the original separate CLI calls')
     args = parser.parse_args()
     try:

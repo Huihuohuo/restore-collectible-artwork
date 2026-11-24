@@ -49,20 +49,31 @@ def start(args):
     size, format_metadata = prepare.output_size(geometry)
     resolved = {**geometry, 'output_size': list(size)}
     resolved.pop('pixels_per_mm', None)
+    resolved.pop('long_edge_px', None)
     metadata = paths.get('reference_report', paths['reference'].parent/'report.json')
     if json.loads(metadata.read_text(encoding='utf-8')).get('geometry') != resolved:
         raise ValueError('Cached reference geometry differs before generation')
     protected[str(metadata)] = PIPELINE.digest(metadata)
-    # Stable prompt and edit input are reused byte-for-byte; no new prompting.
+    contract = prepare.generation_contract(paths['reference'], data.get('generation_layout'))
+    if contract['layout'] == 'full_canvas':
+        try:
+            prepare.full_canvas_crop(edit_input, size)
+        except ValueError as error:
+            raise ValueError('Full-canvas edit input must be opaque and have the target ratio; use prepared/reference.png') from error
+    effective_prompt = prompt.read_text(encoding='utf-8').rstrip() + '\n\nOutput requirements:\n' + contract['output_requirements'] + '\n'
+    folder.mkdir(parents=True, exist_ok=False)
+    actual_prompt = folder/'tool-prompt.txt'
+    actual_prompt.write_text(effective_prompt, encoding='utf-8')
+    protected[str(actual_prompt)] = PIPELINE.digest(actual_prompt)
     state = {'status': 'waiting_for_one_generation', 'started_perf': PROCESS_STARTED,
-             'started_unix': PROCESS_UNIX, 'config': str(config), 'prompt': str(prompt),
+             'started_unix': PROCESS_UNIX, 'config': str(config), 'prompt': str(actual_prompt),
+             'source_prompt': str(prompt), 'generation': contract,
              'edit_input': str(edit_input), 'tool_dir': str(root),
              'protected_sha256': protected, 'existing_pngs': inventory(root),
-             'scope': 'Reused source quad/reference/prompt; no first-upload detection or website API.'}
-    folder.mkdir(parents=True, exist_ok=False)
+             'scope': 'Prepared source quad/reference and prompt with recorded output requirements; no first-upload detection or website API.'}
     write_json(folder/'job.json', state)
-    return {'job_dir': str(folder), 'prompt': prompt.read_text(encoding='utf-8'), 'edit_input': str(edit_input),
-            'transparent_background': format_metadata.get('target') == 'whole_card',
+    return {'job_dir': str(folder), 'prompt': effective_prompt, 'edit_input': str(edit_input),
+            'generation_layout': contract['layout'], 'transparent_background': contract['transparent_background'],
             'preflight_seconds': time.perf_counter()-PROCESS_STARTED}
 
 
